@@ -2,21 +2,21 @@ import socket
 import json
 import pyautogui
 
-# غیرفعال کردن قابلیت FailSafe (اگر ماوس به گوشه‌های صفحه رفت، برنامه متوقف نشود)
+# Disable FailSafe
 pyautogui.FAILSAFE = False
-# کاهش تاخیر پیش‌فرض PyAutoGUI برای حرکت بلادرنگ و سریع‌تر
+# Reduce PyAutoGUI delay for instant response
 pyautogui.PAUSE = 0.001
 
-# تنظیمات شبکه
-UDP_IP = "0.0.0.0"  # گوش دادن به تمامی اینترفیس‌های شبکه لپ‌تاپ
+# Network settings
+UDP_IP = "0.0.0.0"  # Listen on all interfaces
 UDP_PORT = 5000
 
-# تنظیمات فیلتر حرکتی (تنظیم بر اساس تست)
-DEADZONE = 0.5  # لرزش‌های کمتر از این مقدار نادیده گرفته می‌شوند
-SENSITIVITY = 1.5  # ضریب حساسیت حرکت ماوس
+# Motion filter settings
+DEADZONE = 0.5  # Ignore movement below threshold
+SENSITIVITY = 1.5  # Mouse sensitivity multiplier
 
 def main():
-    # ایجاد سوکت UDP
+    # Create UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((UDP_IP, UDP_PORT))
     
@@ -25,41 +25,41 @@ def main():
 
     while True:
         try:
-            # دریافت داده از شبکه
-            data, addr = sock.recvfrom(1024)  # بافر ۱۰۲۴ بایتی
+            # Receive data from network
+            data, addr = sock.recvfrom(1024)  # 1024 byte buffer
             
-            # پارس کردن رشته JSON دریافتی
+            # Parse received JSON
             packet = json.loads(data.decode('utf-8'))
             
-            # ۱. مدیریت حرکت (Mouse Movement)
-            # نگاشت: Z گوشی به X لپ‌تاپ، X گوشی به Y لپ‌تاپ
+            # 1. Mouse Movement
+            # Phone Z→Laptop X, Phone X→Laptop Y
             delta_x = packet.get("DeltaX", 0.0) * SENSITIVITY
             delta_y = packet.get("DeltaY", 0.0) * SENSITIVITY
             
-            # اعمال فیلتر آستانه لرزش (Deadzone)
+            # Apply deadzone filter
             if abs(delta_x) < DEADZONE: delta_x = 0
             if abs(delta_y) < DEADZONE: delta_y = 0
             
             if delta_x != 0 or delta_y != 0:
-                # جابه‌جایی نسبی مکان‌نما روی ویندوز
+                # Move mouse relatively
                 pyautogui.moveRel(delta_x, delta_y)
             
-            # ۲. مدیریت کلیک (Click Event)
+            # 2. Click Event
             if packet.get("Click", False):
                 pyautogui.click()
                 print(f"[CLICK] Click executed. Sending ACK to {addr}")
-                # ارسال تاییدیه (ACK) به گوشی
+                # Send ACK to phone
                 ack_packet = json.dumps({"ACK": "Click"}).encode('utf-8')
                 sock.sendto(ack_packet, addr)
                 
-            # ۳. مدیریت اسکرول (Scroll Event)
-            # مقدار این فیلد می‌تواند ۱ (اسکرول به بالا) یا ۱- (اسکرول به پایین) باشد
+            # 3. Scroll Event
+            # Value: 1 for up, -1 for down
             scroll_dir = packet.get("Scroll", 0)
             if scroll_dir != 0:
-                # در PyAutoGUI مقادیر مثبت به بالا و منفی به پایین اسکرول می‌کنند
+                # Positive = up, negative = down
                 pyautogui.scroll(scroll_dir * 100) 
                 print(f"[SCROLL] Scroll executed ({scroll_dir}). Sending ACK to {addr}")
-                # ارسال تاییدیه (ACK) به گوشی
+                # Send ACK to phone
                 ack_packet = json.dumps({"ACK": "Scroll"}).encode('utf-8')
                 sock.sendto(ack_packet, addr)
 
