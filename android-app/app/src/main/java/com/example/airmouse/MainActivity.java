@@ -19,9 +19,8 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
     private TextView sensorDebugText;
     private EditText ipInput;
     private Button startButton;
-    private Button calibrateButton;
 
-    private FakeSensorEngine sensorEngine;
+    private RealSensorEngine sensorEngine;
     private UdpSender udpSender;
 
     private float cursorX = 0f;
@@ -40,9 +39,9 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
         sensorDebugText = findViewById(R.id.sensorDebugText);
         ipInput = findViewById(R.id.ipInput);
         startButton = findViewById(R.id.startButton);
-        calibrateButton = findViewById(R.id.calibrateButton);
+        Button calibrateButton = findViewById(R.id.calibrateButton);
 
-        sensorEngine = new FakeSensorEngine(this);
+        sensorEngine = new RealSensorEngine(this, this);
 
         startButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -51,13 +50,15 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
             }
         });
 
-        calibrateButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(MainActivity.this, CalibrationActivity.class);
-                startActivity(intent);
-            }
-        });
+        if (calibrateButton != null) {
+            calibrateButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent intent = new Intent(MainActivity.this, CalibrationActivity.class);
+                    startActivity(intent);
+                }
+            });
+        }
     }
 
     private void toggleMouse() {
@@ -69,8 +70,12 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
             }
 
             udpSender = new UdpSender(ip);
-            udpSender.setListener(message -> {
-                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+            // Properly binding to UdpSender ConnectionListener callback structure
+            udpSender.setListener(new UdpSender.ConnectionListener() {
+                @Override
+                public void onError(String message) {
+                    Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+                }
             });
             udpSender.start();
 

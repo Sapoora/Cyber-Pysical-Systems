@@ -1,5 +1,10 @@
 package com.example.airmouse;
 
+import android.content.Context;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -7,10 +12,11 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-public class CalibrationActivity extends AppCompatActivity {
+public class CalibrationActivity extends AppCompatActivity implements SensorEventListener {
 
     private TextView stepTitle;
     private TextView stepInstruction;
@@ -20,10 +26,22 @@ public class CalibrationActivity extends AppCompatActivity {
     private Button finishButton;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private SensorManager sensorManager;
+    private Sensor accelSensor;
+    private Sensor gyroSensor;
+    private Sensor magSensor;
 
-    // calibration steps: 0 = gyro, 1 = accel, 2 = magnetometer
     private int currentStep = 0;
     private static final int TOTAL_STEPS = 3;
+
+    // Optimized memory management: Accumulators instead of large ArrayLists
+    private final float[] gyroSum = new float[3];
+    private int gyroSampleCount = 0;
+
+    private float[] minMag = new float[]{Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
+    private float[] maxMag = new float[]{Float.MIN_VALUE, Float.MIN_VALUE, Float.MIN_VALUE};
+
+    private boolean isCollecting = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,61 +55,88 @@ public class CalibrationActivity extends AppCompatActivity {
         actionButton = findViewById(R.id.calibActionButton);
         finishButton = findViewById(R.id.calibFinishButton);
 
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (sensorManager != null) {
+            accelSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            magSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+        }
+
         showStep(currentStep);
 
-        actionButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                runCurrentStep();
-            }
-        });
-
-        finishButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                finish(); // go back to MainActivity
-            }
-        });
+        if (actionButton != null) {
+            actionButton.setOnClickListener(v -> runCurrentStep());
+        }
+        if (finishButton != null) {
+            finishButton.setOnClickListener(v -> finish());
+        }
     }
 
     private void showStep(int step) {
+        isCollecting = false;
+        String title = "";
+        String inst = "";
+
         switch (step) {
             case 0:
-                stepTitle.setText("Step 1: Gyroscope");
-                stepInstruction.setText("Place the phone on a flat, still surface and press Start.");
+                title = "Step 1: Gyroscope Calibration";
+                inst = "Leave the phone completely static on a flat surface. Do not move it.";
                 break;
             case 1:
-                stepTitle.setText("Step 2: Accelerometer");
-                stepInstruction.setText("Place the phone in 6 different orientations (each side facing down) when asked.");
+                title = "Step 2: Accelerometer Calibration";
+                inst = "Keep the device flat facing upwards to capture the steady gravity vector.";
                 break;
             case 2:
-                stepTitle.setText("Step 3: Magnetometer");
-                stepInstruction.setText("Move the phone in a figure-8 pattern in the air.");
+                title = "Step 3: Magnetometer Calibration";
+                inst = "Wave the smartphone in a continuous Figure-8 pattern in the air.";
                 break;
         }
-        statusText.setText("Waiting to start...");
-        progressBar.setProgress(0);
-        actionButton.setVisibility(View.VISIBLE);
-        actionButton.setText("START STEP");
+
+        if (stepTitle != null) stepTitle.setText(title);
+        if (stepInstruction != null) stepInstruction.setText(inst);
+        if (statusText != null) statusText.setText("Waiting to start...");
+        if (progressBar != null) progressBar.setProgress(0);
+        if (actionButton != null) {
+            actionButton.setVisibility(View.VISIBLE);
+            actionButton.setText("START STEP");
+        }
     }
 
     private void runCurrentStep() {
-        actionButton.setVisibility(View.GONE);
-        statusText.setText("Calibrating...");
+        if (actionButton != null) actionButton.setVisibility(View.GONE);
+        if (statusText != null) statusText.setText("Calibrating... Please follow instructions.");
+
+        // Reset buffers for the current run
+        gyroSum[0] = 0; gyroSum[1] = 0; gyroSum[2] = 0;
+        gyroSampleCount = 0;
+        minMag = new float[]{Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
+        maxMag = new float[]{Float.MIN_VALUE, Float.MIN_VALUE, Float.MIN_VALUE};
+
+        isCollecting = true;
+
+        if (sensorManager != null) {
+            // Using SENSOR_DELAY_GAME to prevent UI starvation and match game-loop profiling
+            if (currentStep == 0 && gyroSensor != null) sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
+            if (currentStep == 1 && accelSensor != null) sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME);
+            if (currentStep == 2 && magSensor != null) sensorManager.registerListener(this, magSensor, SensorManager.SENSOR_DELAY_GAME);
+        }
+
         simulateProgress();
     }
 
-    // placeholder progress simulation; real sensor reading logic goes here later
     private void simulateProgress() {
         final int[] progress = {0};
         Runnable progressRunnable = new Runnable() {
             @Override
             public void run() {
-                progress[0] += 10;
-                progressBar.setProgress(progress[0]);
+                progress[0] += 5;
+                if (progressBar != null) progressBar.setProgress(progress[0]);
                 if (progress[0] < 100) {
-                    handler.postDelayed(this, 150);
+                    handler.postDelayed(this, 100);
                 } else {
+                    isCollecting = false;
+                    if (sensorManager != null) sensorManager.unregisterListener(CalibrationActivity.this);
+                    calculateCalibrationParameters();
                     onStepFinished();
                 }
             }
@@ -99,19 +144,52 @@ public class CalibrationActivity extends AppCompatActivity {
         handler.post(progressRunnable);
     }
 
-    private void onStepFinished() {
-        statusText.setText("Step complete!");
-        currentStep++;
-        if (currentStep < TOTAL_STEPS) {
-            handler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    showStep(currentStep);
-                }
-            }, 800);
-        } else {
-            statusText.setText("All steps complete!");
-            finishButton.setVisibility(View.VISIBLE);
+    private void calculateCalibrationParameters() {
+        if (currentStep == 0 && gyroSampleCount > 0) {
+            RealSensorEngine.gyroBias[0] = gyroSum[0] / gyroSampleCount;
+            RealSensorEngine.gyroBias[1] = gyroSum[1] / gyroSampleCount;
+            RealSensorEngine.gyroBias[2] = gyroSum[2] / gyroSampleCount;
+        }
+        else if (currentStep == 2) {
+            for (int i = 0; i < 3; i++) {
+                RealSensorEngine.magOffset[i] = (maxMag[i] + minMag[i]) / 2.0f;
+                float scaleValue = (maxMag[i] - minMag[i]) / 2.0f;
+                RealSensorEngine.magScale[i] = (scaleValue == 0) ? 1.0f : scaleValue;
+            }
         }
     }
+
+    private void onStepFinished() {
+        if (statusText != null) statusText.setText("Step complete!");
+        currentStep++;
+        if (currentStep < TOTAL_STEPS) {
+            handler.postDelayed(() -> showStep(currentStep), 800);
+        } else {
+            if (statusText != null) statusText.setText("All calibrations completed!");
+            if (finishButton != null) finishButton.setVisibility(View.VISIBLE);
+            Toast.makeText(this, "Calibration successfully applied!", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (!isCollecting) return;
+
+        int type = event.sensor.getType();
+        if (type == Sensor.TYPE_GYROSCOPE) {
+            // Direct streaming accumulation without memory allocation overhead
+            gyroSum[0] += event.values[0];
+            gyroSum[1] += event.values[1];
+            gyroSum[2] += event.values[2];
+            gyroSampleCount++;
+        } else if (type == Sensor.TYPE_MAGNETIC_FIELD) {
+            for (int i = 0; i < 3; i++) {
+                if (event.values[i] < minMag[i]) minMag[i] = event.values[i];
+                if (event.values[i] > maxMag[i]) maxMag[i] = event.values[i];
+            }
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) { }
 }
