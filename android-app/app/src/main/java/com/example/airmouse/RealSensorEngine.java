@@ -41,6 +41,8 @@ public class RealSensorEngine implements SensorEventListener {
     private long lastClickTime = 0;
     private long lastScrollTime = 0;
     private static final long GESTURE_DEBOUNCE_MS = 400;
+    private static final long CLICK_MOTION_SUPPRESSION_MS = 180;
+    private long suppressMotionUntilTime = 0;
 
     // Throttling mechanism for UI Debug updates to prevent rendering starvation
     private long lastDebugUpdateTime = 0;
@@ -127,7 +129,20 @@ public class RealSensorEngine implements SensorEventListener {
                     }
                     Trace.endSection(); // AirMouse_ComplementaryFilter
 
-                    // 2. Differential Motion Extraction
+                    // 2. Click Gesture Detection (Rapid Pitch-Y acceleration debounce)
+                    boolean clickGestureDetected =
+                            gyroY > GYRO_Y_CLICK_THRESHOLD
+                                    && (currentTime - lastClickTime > GESTURE_DEBOUNCE_MS);
+
+                    if (clickGestureDetected) {
+                        lastClickTime = currentTime;
+                        suppressMotionUntilTime = currentTime + CLICK_MOTION_SUPPRESSION_MS;
+                        if (listener != null) {
+                            listener.onClick();
+                        }
+                    }
+
+                    // 3. Differential Motion Extraction
                     float deltaX = gyroZ * MOVEMENT_SENSITIVITY;
                     float deltaY = gyroX * MOVEMENT_SENSITIVITY;
 
@@ -135,16 +150,8 @@ public class RealSensorEngine implements SensorEventListener {
                     if (Math.abs(deltaX) < 0.15f) deltaX = 0f;
                     if (Math.abs(deltaY) < 0.15f) deltaY = 0f;
 
-                    if (listener != null) {
+                    if (currentTime >= suppressMotionUntilTime && listener != null) {
                         listener.onMouseMove(deltaX, deltaY);
-                    }
-
-                    // 3. Click Gesture Detection (Rapid Pitch-Y acceleration debounce)
-                    if (gyroY > GYRO_Y_CLICK_THRESHOLD && (currentTime - lastClickTime > GESTURE_DEBOUNCE_MS)) {
-                        lastClickTime = currentTime;
-                        if (listener != null) {
-                            listener.onClick();
-                        }
                     }
                 }
                 lastTimestamp = event.timestamp;
