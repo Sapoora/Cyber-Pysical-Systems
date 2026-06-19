@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#1A1A1A"
+    android:padding="24dp"
+    android:gravity="center">
+
+    <TextView
+        android:id="@+id/calibStepTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Step 1: Gyroscope"
+        android:textColor="#FFFFFF"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:gravity="center"/>
+
+    <TextView
+        android:id="@+id/calibStepInstruction"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Place the phone on a flat, still surface and press Start."
+        android:textColor="#CCCCCC"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:layout_marginTop="16dp"/>
+
+    <ProgressBar
+        android:id="@+id/calibProgressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:max="100"
+        android:progress="0"/>
+
+    <TextView
+        android:id="@+id/calibStatusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Waiting to start..."
+        android:textColor="#888888"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:layout_marginTop="12dp"/>
+
+    <Button
+        android:id="@+id/calibActionButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="START STEP"
+        android:backgroundTint="#2196F3"
+        android:layout_marginTop="32dp"/>
+
+    <Button
+        android:id="@+id/calibFinishButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="FINISH CALIBRATION"
+        android:backgroundTint="#4CAF50"
+        android:visibility="gone"
+        android:layout_marginTop="16dp"/>
+
+</LinearLayout>
