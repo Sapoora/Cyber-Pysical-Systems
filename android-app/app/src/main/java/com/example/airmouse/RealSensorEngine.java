@@ -131,14 +131,14 @@ public class RealSensorEngine implements SensorEventListener {
                     }
                     Trace.endSection(); // AirMouse_ComplementaryFilter
 
-                    boolean clickGestureInProgress = gyroY > GYRO_Y_CLICK_START_THRESHOLD;
+                    boolean clickGestureInProgress = gyroY < -GYRO_Y_CLICK_START_THRESHOLD;
                     if (clickGestureInProgress) {
                         suppressMotionUntilTime = currentTime + CLICK_MOTION_SUPPRESSION_MS;
                     }
 
                     // 2. Click Gesture Detection (Rapid Pitch-Y acceleration debounce)
                     boolean clickGestureDetected =
-                            gyroY > GYRO_Y_CLICK_THRESHOLD
+                            gyroY < -GYRO_Y_CLICK_THRESHOLD
                                     && (currentTime - lastClickTime > GESTURE_DEBOUNCE_MS);
 
                     if (clickGestureDetected) {
