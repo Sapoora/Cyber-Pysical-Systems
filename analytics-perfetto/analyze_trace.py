@@ -27,10 +27,10 @@ def run_query(title, sql_query, description=""):
         return None
 
 # ==============================================================================
-# سوال ۳: نرخ نمونه‌برداری واقعی سنسورها در مقایسه با کد
+# Question 3: Actual sensor sampling rate compared to the code
 # ==============================================================================
-s3_title = "سوال ۳: محاسبه دوره نمونه‌برداری واقعی سنسورها در مقایسه با کد"
-s3_desc = "استخراج فاصله زمانی (Timestamp) بین رویدادهای متوالی سنسور برای محاسبه فرکانس واقعی."
+s3_title = "Question 3: Calculate the actual sensor sampling period compared to the code"
+s3_desc = "Extract the time interval (timestamp) between consecutive sensor events to calculate the actual frequency."
 s3_query = """
     SELECT 
         name,
@@ -45,15 +45,15 @@ s3_query = """
 res3 = run_query(s3_title, s3_query, s3_desc)
 if res3:
     for row in res3:
-        print(f"اسم رویداد: {row.name}")
-        print(f"  🔹 تعداد کل نمونه‌ها: {row.total_samples}")
-        print(f"  🔹 دوره نمونه‌برداری متوسط سیستمی: {row.avg_period_ms:.4f} میلی‌ثانیه")
-        print(f"  🔹 فرکانس معادل: {1000.0/row.avg_period_ms:.2f} هرتز")
+        print(f"Event name: {row.name}")
+        print(f"  🔹 Total samples: {row.total_samples}")
+        print(f"  🔹 Average system sampling period: {row.avg_period_ms:.4f} ms")
+        print(f"  🔹 Equivalent frequency: {1000.0/row.avg_period_ms:.2f} Hz")
 
 # ==============================================================================
-# سوال ۴: تعارض فرخوان‌های سیستمی (System Calls) و پردازش گرافیکی
+# Question 4: Conflicts between system calls and graphics processing
 # ==============================================================================
-s4_title = "سوال ۴: بررسی تعارض و بلاک شدن ترد سنسور توسط رندر گرافیکی یا Syscalls"
+s4_title = "Question 4: Check sensor thread contention and blocking by graphics rendering or syscalls"
 s4_query = """
     SELECT 
         t.name as thread_name,
@@ -71,13 +71,13 @@ s4_query = """
 res4 = run_query(s4_title, s4_query)
 if res4:
     for row in res4:
-        status = "منتظر CPU (Runnable)" if row.state == 'R' else "قفل شده روی Syscall/IO"
-        print(f"ریسمان: {row.thread_name} | وضعیت: {status} | مجموع تاخیر: {row.total_blocked_time_ms:.2f} ms")
+        status = "Waiting for CPU (Runnable)" if row.state == 'R' else "Blocked on syscall/IO"
+        print(f"Thread: {row.thread_name} | State: {status} | Total delay: {row.total_blocked_time_ms:.2f} ms")
 
 # ==============================================================================
-# سوال ۶: میانگین زمان اجرای تابع فیلتر روی CPU
+# Question 6: Average filter function execution time on CPU
 # ==============================================================================
-s6_title = "سوال ۶: میانگین زمان اجرای تابع فیلتر و تفکیک بار پردازشی سنسورها"
+s6_title = "Question 6: Average filter function execution time and sensor processing load breakdown"
 s6_query = """
     SELECT 
         name as filter_function_name,
@@ -91,14 +91,14 @@ s6_query = """
 res6 = run_query(s6_title, s6_query)
 if res6:
     for row in res6:
-        print(f"تابع فیلتر: {row.filter_function_name}")
-        print(f"  🔹 تعداد دفعات اجرا: {row.execution_count}")
-        print(f"  🔹 میانگین زمان پردازش روی سی‌پیو: {row.avg_execution_time_ms:.4f} میلی‌ثانیه")
+        print(f"Filter function: {row.filter_function_name}")
+        print(f"  🔹 Execution count: {row.execution_count}")
+        print(f"  🔹 Average CPU processing time: {row.avg_execution_time_ms:.4f} ms")
 
 # ==============================================================================
-# سوال ۱۰: تفکیک و پیگیری فعالیت ریسمان‌ها (Threads)
+# Question 10: Break down and track thread activity
 # ==============================================================================
-s10_title = "سوال ۱۰: تفکیک وظایف تردها و بار تحمیلی روی ترد اصلی"
+s10_title = "Question 10: Break down thread responsibilities and load imposed on the main thread"
 s10_query = """
     SELECT 
         t.name as thread_name,
@@ -114,7 +114,7 @@ s10_query = """
 res10 = run_query(s10_title, s10_query)
 if res10:
     for row in res10:
-        print(f"🧵 نام ترد: {row.thread_name:<20} | مجموع زمان فعالیت: {row.total_active_time_ms:.2f} ms")
+        print(f"🧵 Thread name: {row.thread_name:<20} | Total active time: {row.total_active_time_ms:.2f} ms")
 
 print("\n" + "="*80)
 print("✅ [PERFETTO] Analysis complete smoothly!")
