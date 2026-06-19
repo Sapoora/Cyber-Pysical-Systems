@@ -1,5 +1,6 @@
 package com.example.airmouse;
 
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
@@ -43,24 +44,18 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
 
         sensorEngine = new RealSensorEngine(this, this);
 
-        startButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                toggleMouse();
-            }
-        });
+        startButton.setOnClickListener(v -> toggleMouse());
 
         if (calibrateButton != null) {
-            calibrateButton.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Intent intent = new Intent(MainActivity.this, CalibrationActivity.class);
-                    startActivity(intent);
-                }
+            calibrateButton.setOnClickListener(v -> {
+                Intent intent = new Intent(MainActivity.this, CalibrationActivity.class);
+                startActivity(intent);
             });
         }
     }
 
+    // Suppressing Internationalization warnings for hardware logs and internal buttons
+    @SuppressLint("SetTextI18n")
     private void toggleMouse() {
         if (!isRunning) {
             String ip = ipInput.getText().toString().trim();
@@ -70,13 +65,10 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
             }
 
             udpSender = new UdpSender(ip);
-            // Properly binding to UdpSender ConnectionListener callback structure
-            udpSender.setListener(new UdpSender.ConnectionListener() {
-                @Override
-                public void onError(String message) {
-                    Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
-                }
-            });
+            // Properly binding to UdpSender ConnectionListener without leaking context
+            udpSender.setListener(message ->
+                    Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show()
+            );
             udpSender.start();
 
             isRunning = true;
@@ -85,13 +77,17 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
         } else {
             isRunning = false;
             sensorEngine.stop();
-            if (udpSender != null) udpSender.stop();
+            if (udpSender != null) {
+                udpSender.stop();
+            }
             startButton.setText("START MOUSE");
         }
     }
 
     @Override
     public void onMouseMove(float deltaX, float deltaY) {
+        if (mouseArea == null || cursorSquare == null) return;
+
         int areaWidth = mouseArea.getWidth();
         int areaHeight = mouseArea.getHeight();
         int squareSize = cursorSquare.getWidth();
@@ -115,24 +111,45 @@ public class MainActivity extends AppCompatActivity implements SensorDataListene
         }
     }
 
+    @SuppressLint("SetTextI18n")
     @Override
     public void onClick() {
-        clickStatusText.setText("CLICK!");
+        if (clickStatusText != null) {
+            clickStatusText.setText("CLICK!");
+        }
         if (udpSender != null) {
             udpSender.sendClick();
         }
     }
 
+    @SuppressLint("SetTextI18n")
     @Override
     public void onScroll(int direction) {
-        clickStatusText.setText(direction > 0 ? "SCROLL UP" : "SCROLL DOWN");
+        if (clickStatusText != null) {
+            clickStatusText.setText(direction > 0 ? "SCROLL UP" : "SCROLL DOWN");
+        }
         if (udpSender != null) {
             udpSender.sendScroll(direction);
         }
     }
 
+    @SuppressLint("SetTextI18n")
     @Override
     public void onSensorDebugUpdate(String gyroText, String accelText, String magnetText) {
-        sensorDebugText.setText(gyroText + "\n" + accelText + "\n" + magnetText);
+        if (sensorDebugText != null) {
+            sensorDebugText.setText(gyroText + "\n" + accelText + "\n" + magnetText);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Safeguard to prevent leaking background thread resources during lifecycles
+        if (isRunning) {
+            sensorEngine.stop();
+            if (udpSender != null) {
+                udpSender.stop();
+            }
+        }
     }
 }

@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class UdpSender {
@@ -16,17 +18,23 @@ public class UdpSender {
     private static final int MAX_RETRIES = 3;
 
     private final String laptopIp;
+
     private DatagramSocket socket;
+    private InetAddress serverAddress;
+
     private Thread senderThread;
-    private Thread receiverThread;
     private volatile boolean running = false;
 
-    private final LinkedBlockingQueue<String> queue = new LinkedBlockingQueue<>();
+    /*
+     * Only reliable events (Click and Scroll)
+     * are queued and sent with ACK verification.
+     * Mouse movement packets are sent directly.
+     */
+    private final LinkedBlockingQueue<String> reliableQueue =
+            new LinkedBlockingQueue<>();
 
-    // tracks whether last sent reliable packet got ACKed
-    private volatile boolean ackReceived = false;
-
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Handler mainHandler =
+            new Handler(Looper.getMainLooper());
 
     public interface ConnectionListener {
         void onError(String message);
@@ -43,110 +51,254 @@ public class UdpSender {
     }
 
     public void start() {
-        if (running) return;
-        running = true;
 
-        try {
-            socket = new DatagramSocket();
-            socket.setSoTimeout(ACK_TIMEOUT_MS);
-        } catch (IOException e) {
-            notifyError("Socket creation failed: " + e.getMessage());
-            running = false;
+        if (running) {
             return;
         }
 
-        senderThread = new Thread(this::senderLoop);
-        senderThread.start();
+        try {
+
+            serverAddress = InetAddress.getByName(laptopIp);
+
+            socket = new DatagramSocket();
+            socket.setSoTimeout(ACK_TIMEOUT_MS);
+
+            running = true;
+
+            senderThread =
+                    new Thread(this::senderLoop,
+                            "UdpReliableSender");
+
+            senderThread.start();
+
+        } catch (Exception e) {
+
+            notifyError(
+                    "Socket creation failed: "
+                            + e.getMessage()
+            );
+
+            running = false;
+        }
     }
 
     public void stop() {
+
         running = false;
-        queue.clear();
-        if (senderThread != null) senderThread.interrupt();
-        if (socket != null) socket.close();
+
+        reliableQueue.clear();
+
+        if (senderThread != null) {
+            senderThread.interrupt();
+        }
+
+        if (socket != null && !socket.isClosed()) {
+            socket.close();
+        }
     }
 
-    // movement-only packets: safe to drop, no ACK needed
+    /*
+     * Mouse movement packets:
+     * - Sent directly via UDP
+     * - No ACK required
+     * - No queue buffering
+     * This minimizes latency and improves responsiveness.
+     */
     public void sendMove(float deltaX, float deltaY) {
-        if (!running) return;
-        // keep queue small for movement packets, drop oldest if full
-        queue.poll(); // drop previous unsent move packet if any
-        String json = buildJson(deltaX, deltaY, false, 0);
-        queue.offer(json);
+
+        if (!running
+                || socket == null
+                || serverAddress == null) {
+            return;
+        }
+
+        try {
+
+            String json =
+                    buildJson(deltaX,
+                            deltaY,
+                            false,
+                            0);
+
+            byte[] data =
+                    json.getBytes(StandardCharsets.UTF_8);
+
+            DatagramPacket packet =
+                    new DatagramPacket(
+                            data,
+                            data.length,
+                            serverAddress,
+                            PORT
+                    );
+
+            socket.send(packet);
+
+        } catch (IOException ignored) {
+            /*
+             * Occasional movement packet loss is acceptable
+             * because UDP is used for low-latency transmission.
+             * Subsequent movement packets will compensate.
+             */
+        }
     }
 
-    // click/scroll packets: must be delivered reliably
     public void sendClick() {
-        sendReliable(buildJson(0, 0, true, 0));
+
+        sendReliable(
+                buildJson(
+                        0,
+                        0,
+                        true,
+                        0
+                )
+        );
     }
 
     public void sendScroll(int direction) {
-        sendReliable(buildJson(0, 0, false, direction));
+
+        sendReliable(
+                buildJson(
+                        0,
+                        0,
+                        false,
+                        direction
+                )
+        );
     }
 
     private void sendReliable(String json) {
-        if (!running) return;
-        queue.offer("R:" + json); // prefix R: marks reliable packet
+
+        if (!running) {
+            return;
+        }
+
+        reliableQueue.offer(json);
     }
 
+    /*
+     * only Click & Scroll
+     */
     private void senderLoop() {
-        try {
-            InetAddress address = InetAddress.getByName(laptopIp);
 
-            while (running) {
-                String item = queue.poll();
-                if (item == null) {
-                    Thread.sleep(5);
-                    continue;
-                }
+        while (running
+                && !Thread.currentThread().isInterrupted()) {
 
-                boolean reliable = item.startsWith("R:");
-                String json = reliable ? item.substring(2) : item;
-                byte[] data = json.getBytes();
-                DatagramPacket packet = new DatagramPacket(data, data.length, address, PORT);
+            try {
 
-                if (!reliable) {
-                    socket.send(packet);
-                } else {
-                    sendWithAck(packet);
+                String json =
+                        reliableQueue.take();
+
+                byte[] data =
+                        json.getBytes(
+                                StandardCharsets.UTF_8
+                        );
+
+                DatagramPacket packet =
+                        new DatagramPacket(
+                                data,
+                                data.length,
+                                serverAddress,
+                                PORT
+                        );
+
+                sendWithAck(packet);
+
+            } catch (InterruptedException e) {
+
+                Thread.currentThread().interrupt();
+                break;
+
+            } catch (Exception e) {
+
+                if (running) {
+
+                    notifyError(
+                            "Sender error: "
+                                    + e.getMessage()
+                    );
                 }
             }
-        } catch (Exception e) {
-            notifyError("Sender error: " + e.getMessage());
         }
     }
 
-    private void sendWithAck(DatagramPacket packet) {
+    private void sendWithAck(
+            DatagramPacket packet) {
+
         int attempts = 0;
-        while (attempts < MAX_RETRIES && running) {
+
+        while (attempts < MAX_RETRIES
+                && running
+                && !Thread.currentThread().isInterrupted()) {
+
             try {
+
                 socket.send(packet);
 
-                byte[] buffer = new byte[64];
-                DatagramPacket response = new DatagramPacket(buffer, buffer.length);
-                socket.receive(response); // blocks until ACK or timeout
+                byte[] buffer = new byte[128];
 
-                String reply = new String(response.getData(), 0, response.getLength());
+                DatagramPacket response =
+                        new DatagramPacket(
+                                buffer,
+                                buffer.length
+                        );
+
+                socket.receive(response);
+
+                String reply =
+                        new String(
+                                response.getData(),
+                                0,
+                                response.getLength(),
+                                StandardCharsets.UTF_8
+                        );
+
                 if (reply.contains("ACK")) {
-                    return; // success
+                    return;
                 }
-            } catch (IOException timeoutOrError) {
+
+            } catch (IOException e) {
+
                 attempts++;
             }
         }
-        notifyError("Failed to deliver reliable packet after retries");
-    }
 
-    private String buildJson(float deltaX, float deltaY, boolean click, int scroll) {
-        return "{\"DeltaX\":" + deltaX +
-                ",\"DeltaY\":" + deltaY +
-                ",\"Click\":" + click +
-                ",\"Scroll\":" + scroll + "}";
-    }
+        if (attempts >= MAX_RETRIES
+                && running) {
 
-    private void notifyError(String message) {
-        if (listener != null) {
-            mainHandler.post(() -> listener.onError(message));
+            notifyError(
+                    "Failed to deliver reliable packet after retries"
+            );
         }
+    }
+
+    private String buildJson(
+            float deltaX,
+            float deltaY,
+            boolean click,
+            int scroll) {
+
+        return String.format(
+                Locale.US,
+                "{\"DeltaX\":%.2f,\"DeltaY\":%.2f,\"Click\":%b,\"Scroll\":%d}",
+                deltaX,
+                deltaY,
+                click,
+                scroll
+        );
+    }
+
+    private void notifyError(
+            String message) {
+
+        if (listener == null) {
+            return;
+        }
+
+        mainHandler.post(() -> {
+
+            if (listener != null) {
+                listener.onError(message);
+            }
+        });
     }
 }

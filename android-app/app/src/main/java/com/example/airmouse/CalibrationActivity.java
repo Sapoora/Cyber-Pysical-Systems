@@ -1,5 +1,6 @@
 package com.example.airmouse;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -26,6 +27,8 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
     private Button finishButton;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private Runnable progressRunnable;
+
     private SensorManager sensorManager;
     private Sensor accelSensor;
     private Sensor gyroSensor;
@@ -34,10 +37,15 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
     private int currentStep = 0;
     private static final int TOTAL_STEPS = 3;
 
-    // Optimized memory management: Accumulators instead of large ArrayLists
+    // Accumulators for Gyroscope
     private final float[] gyroSum = new float[3];
     private int gyroSampleCount = 0;
 
+    // Accumulators for Accelerometer
+    private final float[] accelSum = new float[3];
+    private int accelSampleCount = 0;
+
+    // Accumulators for Magnetometer
     private float[] minMag = new float[]{Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
     private float[] maxMag = new float[]{Float.MIN_VALUE, Float.MIN_VALUE, Float.MIN_VALUE};
 
@@ -72,6 +80,7 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private void showStep(int step) {
         isCollecting = false;
         String title = "";
@@ -102,6 +111,7 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private void runCurrentStep() {
         if (actionButton != null) actionButton.setVisibility(View.GONE);
         if (statusText != null) statusText.setText("Calibrating... Please follow instructions.");
@@ -109,13 +119,16 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
         // Reset buffers for the current run
         gyroSum[0] = 0; gyroSum[1] = 0; gyroSum[2] = 0;
         gyroSampleCount = 0;
+
+        accelSum[0] = 0; accelSum[1] = 0; accelSum[2] = 0;
+        accelSampleCount = 0;
+
         minMag = new float[]{Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE};
         maxMag = new float[]{Float.MIN_VALUE, Float.MIN_VALUE, Float.MIN_VALUE};
 
         isCollecting = true;
 
         if (sensorManager != null) {
-            // Using SENSOR_DELAY_GAME to prevent UI starvation and match game-loop profiling
             if (currentStep == 0 && gyroSensor != null) sensorManager.registerListener(this, gyroSensor, SensorManager.SENSOR_DELAY_GAME);
             if (currentStep == 1 && accelSensor != null) sensorManager.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME);
             if (currentStep == 2 && magSensor != null) sensorManager.registerListener(this, magSensor, SensorManager.SENSOR_DELAY_GAME);
@@ -126,7 +139,7 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
 
     private void simulateProgress() {
         final int[] progress = {0};
-        Runnable progressRunnable = new Runnable() {
+        progressRunnable = new Runnable() {
             @Override
             public void run() {
                 progress[0] += 5;
@@ -150,6 +163,22 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
             RealSensorEngine.gyroBias[1] = gyroSum[1] / gyroSampleCount;
             RealSensorEngine.gyroBias[2] = gyroSum[2] / gyroSampleCount;
         }
+        else if (currentStep == 1 && accelSampleCount > 0) {
+            // Calculate Accelerometer 1G linear parameters
+            float meanX = accelSum[0] / accelSampleCount;
+            float meanY = accelSum[1] / accelSampleCount;
+            float meanZ = accelSum[2] / accelSampleCount;
+
+            // When flat facing up: X and Y should be 0, Z should be +9.81 (Gravity)
+            RealSensorEngine.accelOffset[0] = meanX;
+            RealSensorEngine.accelOffset[1] = meanY;
+            RealSensorEngine.accelOffset[2] = meanZ - 9.81f;
+
+            // Standard scale factor defaults to stable unity
+            RealSensorEngine.accelScale[0] = 1.0f;
+            RealSensorEngine.accelScale[1] = 1.0f;
+            RealSensorEngine.accelScale[2] = 1.0f;
+        }
         else if (currentStep == 2) {
             for (int i = 0; i < 3; i++) {
                 RealSensorEngine.magOffset[i] = (maxMag[i] + minMag[i]) / 2.0f;
@@ -159,6 +188,7 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private void onStepFinished() {
         if (statusText != null) statusText.setText("Step complete!");
         currentStep++;
@@ -177,16 +207,35 @@ public class CalibrationActivity extends AppCompatActivity implements SensorEven
 
         int type = event.sensor.getType();
         if (type == Sensor.TYPE_GYROSCOPE) {
-            // Direct streaming accumulation without memory allocation overhead
             gyroSum[0] += event.values[0];
             gyroSum[1] += event.values[1];
             gyroSum[2] += event.values[2];
             gyroSampleCount++;
-        } else if (type == Sensor.TYPE_MAGNETIC_FIELD) {
+        }
+        else if (type == Sensor.TYPE_ACCELEROMETER) {
+            // Capturing raw stream dataset for the linear calculation step
+            accelSum[0] += event.values[0];
+            accelSum[1] += event.values[1];
+            accelSum[2] += event.values[2];
+            accelSampleCount++;
+        }
+        else if (type == Sensor.TYPE_MAGNETIC_FIELD) {
             for (int i = 0; i < 3; i++) {
                 if (event.values[i] < minMag[i]) minMag[i] = event.values[i];
                 if (event.values[i] > maxMag[i]) maxMag[i] = event.values[i];
             }
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        isCollecting = false;
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(this);
+        }
+        if (handler != null && progressRunnable != null) {
+            handler.removeCallbacks(progressRunnable);
         }
     }
 
