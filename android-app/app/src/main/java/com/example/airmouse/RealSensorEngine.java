@@ -35,6 +35,7 @@ public class RealSensorEngine implements SensorEventListener {
 
     // --- Thresholds & Gesture Control ---
     private static final float MOVEMENT_SENSITIVITY = 15.0f;
+    private static final float GYRO_Y_CLICK_START_THRESHOLD = 1.2f;
     private static final float GYRO_Y_CLICK_THRESHOLD = 4.5f;
     private static final float ACCEL_Y_SCROLL_THRESHOLD = 6.0f;
 
@@ -74,6 +75,7 @@ public class RealSensorEngine implements SensorEventListener {
         running = true;
         lastTimestamp = 0;
         lastDebugUpdateTime = 0;
+        suppressMotionUntilTime = 0;
 
         if (sensorManager != null) {
             if (accelerometer != null) sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME);
@@ -129,6 +131,11 @@ public class RealSensorEngine implements SensorEventListener {
                     }
                     Trace.endSection(); // AirMouse_ComplementaryFilter
 
+                    boolean clickGestureInProgress = gyroY > GYRO_Y_CLICK_START_THRESHOLD;
+                    if (clickGestureInProgress) {
+                        suppressMotionUntilTime = currentTime + CLICK_MOTION_SUPPRESSION_MS;
+                    }
+
                     // 2. Click Gesture Detection (Rapid Pitch-Y acceleration debounce)
                     boolean clickGestureDetected =
                             gyroY > GYRO_Y_CLICK_THRESHOLD
@@ -136,7 +143,6 @@ public class RealSensorEngine implements SensorEventListener {
 
                     if (clickGestureDetected) {
                         lastClickTime = currentTime;
-                        suppressMotionUntilTime = currentTime + CLICK_MOTION_SUPPRESSION_MS;
                         if (listener != null) {
                             listener.onClick();
                         }
