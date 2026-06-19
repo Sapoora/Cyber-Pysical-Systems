@@ -149,8 +149,8 @@ public class RealSensorEngine implements SensorEventListener {
                     }
 
                     // 3. Differential Motion Extraction
-                    float deltaX = gyroZ * MOVEMENT_SENSITIVITY;
-                    float deltaY = gyroX * MOVEMENT_SENSITIVITY;
+                    float deltaX = -gyroZ * MOVEMENT_SENSITIVITY;
+                    float deltaY = -gyroX * MOVEMENT_SENSITIVITY;
 
                     // Low-magnitude deadzone threshold to eliminate hand trembles
                     if (Math.abs(deltaX) < 0.15f) deltaX = 0f;
