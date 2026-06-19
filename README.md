@@ -130,7 +130,8 @@ python record_android_trace -o trace_file.perfetto-trace -t 10s sched freq idle 
 * **Instructors:** Dr. Mehdi Kargahi, Dr. Mohsen Shokrisaz
 * **Designers:** Arslan Talaee, Arian Firoozi
 
+## video link: https://drive.google.com/file/d/1fvZA2fhcY5LauYtdocS-SXMRNpQhvpK7/view?usp=sharing
+
 ```
-# video link: https://drive.google.com/file/d/1fvZA2fhcY5LauYtdocS-SXMRNpQhvpK7/view?usp=sharing
 
 ```
