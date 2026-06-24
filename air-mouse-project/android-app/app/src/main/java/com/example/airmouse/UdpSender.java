@@ -2,6 +2,7 @@ package com.example.airmouse;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Trace;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -112,6 +113,7 @@ public class UdpSender {
             return;
         }
 
+        Trace.beginSection("AirMouse_UdpSendMove");
         try {
 
             String json =
@@ -139,6 +141,8 @@ public class UdpSender {
              * because UDP is used for low-latency transmission.
              * Subsequent movement packets will compensate.
              */
+        } finally {
+            Trace.endSection();
         }
     }
 
