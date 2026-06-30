@@ -3,6 +3,7 @@
 
 #include <CPS4042/Hardwares/Board.h>
 #include <CPS4042/Protocols/Protocol.h>
+#include <CPS4042/Protocols/USART.h>
 #include <CPS4042/Units/BaudRate.h>
 #include <CPS4042/Wires/Pin.h>
 #include <boost/pfr.hpp>
@@ -119,17 +120,33 @@ public:
 
         void
         write(Byte byte) override
-        {}
+        {
+            Protocols::USART::writeFrame(m_board->gpio().tx, byte);
+        }
 
         Byte
         read() override
         {
-            return 0;
+            return m_receiver.read();
+        }
+
+        bool
+        isDataAvailable() const
+        {
+            return m_receiver.isDataAvailable();
         }
 
         void
         run(Gpio& gpio) override
-        {}
+        {
+            while(gpio.rx.hasBitToRead())
+            {
+                m_receiver.push(gpio.rx.readBit());
+            }
+        }
+
+    private:
+        Protocols::USART::Receiver m_receiver;
 
     } mutable usart {this};
 
