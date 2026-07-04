@@ -47,17 +47,24 @@ class Esp8266
                    Frequency::F320khz, Esp8266Voltage, Esp8266Gpio>
 {
 public:
-    explicit Esp8266() :
-        Parent {"Esp8266::Processor"}
-    {
-        m_processor->communicationClockChanged.connect(
-          [this](Bit edge) { m_gpio.scl.nextEdge(edge); });
+explicit Esp8266() :
+    Parent {"Esp8266::Processor"}
+{
+    /*
+     * USART direction rule:
+     * ESP8266 must write on tx and read from rx.
+     * tx must not read from the USART link; otherwise the board may consume
+     * its own transmitted frame bits.
+     */
+    m_gpio.tx.setCanRead(false);
+    m_processor->communicationClockChanged.connect(
+      [this](Bit edge) { m_gpio.scl.nextEdge(edge); });
 
-        m_processor->installProtocol(&i2c);
-        m_processor->installProtocol(&usart);
+    m_processor->installProtocol(&i2c);
+    m_processor->installProtocol(&usart);
 
-        std::cout << "one instance of Esp8266" << " created." << std::endl;
-    };
+    std::cout << "one instance of Esp8266" << " created." << std::endl;
+};
 
     class I2C : public Protocols::AbstractI2C<Esp8266, Gpio>
     {
