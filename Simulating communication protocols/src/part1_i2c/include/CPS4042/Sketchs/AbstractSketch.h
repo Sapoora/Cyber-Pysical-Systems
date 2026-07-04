@@ -12,6 +12,11 @@ public:
         Object {}, m_node {node}
     {}
 
+    virtual ~AbstractSketch()
+    {
+        if(m_node) m_node->stop();
+    }
+
     void start()
     {
         m_node->installSetupCode(

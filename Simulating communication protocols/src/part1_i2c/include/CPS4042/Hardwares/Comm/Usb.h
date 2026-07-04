@@ -31,6 +31,8 @@ public:
     explicit Usb() :
         Parent {"Usb::processor"}
     {
+        m_gpio.tx.setCanRead(false);
+
         m_processor->installProtocol(&usart);
 
         std::cout << "one instance of Usb" << " created." << std::endl;

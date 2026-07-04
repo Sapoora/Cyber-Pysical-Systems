@@ -9,6 +9,9 @@
 #include <CPS4042/Wires/Link.h>
 #include <CPS4042/Wires/Pin.h>
 
+#include <chrono>
+#include <thread>
+
 namespace GpioHelper
 {
 template <typename T>
@@ -49,6 +52,18 @@ public:
         installProcessor(std::move(processor));
         connectPinsToProcessor(m_gpio);
     };
+
+    virtual ~Board() { stop(); }
+
+    void
+    stop()
+    {
+        if(m_processor)
+        {
+            m_processor->stop();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
 
     void
     installProcessor(std::unique_ptr<ProcessorType> processor)

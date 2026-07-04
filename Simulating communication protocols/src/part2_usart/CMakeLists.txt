@@ -19,3 +19,14 @@ target_include_directories(CPS4042_USART
         ../part1_i2c/include
         ${Boost_INCLUDE_DIRS}
 )
+
+
+add_executable(CPS4042_MUX
+    main_part3.cpp
+)
+
+target_include_directories(CPS4042_MUX
+    PRIVATE
+        ../part1_i2c/include
+        ${Boost_INCLUDE_DIRS}
+)

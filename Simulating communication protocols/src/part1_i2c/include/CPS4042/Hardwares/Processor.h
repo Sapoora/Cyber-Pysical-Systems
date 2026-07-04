@@ -188,17 +188,17 @@ public:
     void
     nextCycle(Gpio& gpio)
     {
-        static bool          isInitiated {false};
-        static std::uint64_t cycle = {};
-        std::int32_t         exitCode {0};
+        if(!m_drivenIsInitiated) m_drivenExitCode = Core::m_setupCode(gpio);
 
-        if(!isInitiated) exitCode = Core::m_setupCode(gpio);
-
-        isInitiated = true;
-        nextCycleP(cycle, exitCode, gpio);
+        m_drivenIsInitiated = true;
+        nextCycleP(m_drivenCycle, m_drivenExitCode, gpio);
     }
 
 private:
+    bool          m_drivenIsInitiated {false};
+    std::uint64_t m_drivenCycle {};
+    std::int32_t  m_drivenExitCode {0};
+
     inline void
     handleClockEdge(const std::uint64_t& cycle)
     {
