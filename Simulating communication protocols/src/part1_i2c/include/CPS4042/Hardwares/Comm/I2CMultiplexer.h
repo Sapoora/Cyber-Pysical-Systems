@@ -6,6 +6,7 @@
 #include <CPS4042/Protocols/USART.h>
 #include <CPS4042/Units/BaudRate.h>
 #include <CPS4042/Wires/Pin.h>
+#include <boost/pfr.hpp>
 
 #include <cstdint>
 #include <iostream>
@@ -231,7 +232,7 @@ public:
         bool    m_addressing {false};
 
     } mutable i2c0 {this, Channel::Ch0},
-      mutable i2c1 {this, Channel::Ch1};
+              i2c1 {this, Channel::Ch1};
 
 protected:
     inline void
